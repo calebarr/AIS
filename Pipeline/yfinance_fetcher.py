@@ -7,64 +7,59 @@ class YFinanceFetcher:
         self.start_date = start_date
         self.end_date = end_date
 
-    def get_sp500_data(start_date, end_date):
-        def update_data(df,fetched_dfs):
-            for fetched_df in fetched_dfs:
-                fetched_df = fetched_df.transpose()
-                fetched_df['Ticker'] = df['Ticker']
-                df = pd.concat([df, fetched_df], axis=0)
-            return df
-            
-        # Use Wikipedia list for reference
-        sp500_tickers = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")[0]
-
-        symbols = sp500_tickers['Symbol'].tolist()
-        # Get the stock data for all the stocks in the S&P 500 index from 2010 to 2020
-        # Create an empty DataFrame to store the data
-        data = pd.DataFrame()
-
-        # Loop through each ticker and get the data
-        for ticker in symbols:
-            try:
-                # Get the stock data for the ticker
-                stock_data = yf.Ticker(ticker).history(start=start_date, end=end_date)
-                # Add a column for the ticker symbol
-                stock_data['Ticker'] = ticker
-                # Append the data to the DataFrame
-                data = pd.concat([data, stock_data], axis=0)
-                # Now we do income statement
-                income_statement = yf.Ticker(ticker).get_income_statement()
-                # Now we do balance sheet
-                balance_sheet = yf.Ticker(ticker).get_balance_sheet()
-                # Now we do cash flow
-                cash_flow = yf.Ticker(ticker).get_cashflow()
-                fetched_dfs = [income_statement, balance_sheet, cash_flow]
-                # Update the data with the fetched data
-                data = update_data(data, fetched_dfs)
-            
-            except Exception as e:
-                print(f"Error retrieving data for {ticker}: {e}")
-
-        data.reset_index(inplace=True)
-
-        # add the details from sp500_tickers to data
-        data = data.merge(sp500_tickers, left_on='Ticker', right_on='Symbol', how='left')
-
-        return data
-    
-    def get_SP500_data_macro(start,end):
+    def get_sp500_tickers(self):
         """
-        Fetches historical stock data for all S&P 500 companies from YFinance.
+        Fetches the list of S&P 500 tickers from YFinance.
         """
         # Fetch the S&P 500 data
         sp500 = yf.Ticker("^GSPC")
-        # Get the historical data for the S&P 500
-        sp500_data = sp500.history(start=start, end=end)
-        return sp500_data
+        # Get the S&P 500 components
+        sp500_tickers = sp500.constituents
+        return sp500_tickers
+
+    def get_ticker_price(self,tickers,start, end):
+        """
+        Fetches historical stock data for a given ticker from YFinance.
+        """
+        # download the data
+        df = yf.download(tickers, start=start, end=end)
+        # reset index to make 'Date' a column
+        df = df.reset_index()
+        return df
+
+    def get_sp500_statements(symbols):
+        income, balance, cashflow = [], [], []
+
+        for ticker in symbols:
+            tk = yf.Ticker(ticker)
+            # mapping of label → DataFrame
+            stmt_map = {
+                "income":    tk.financials,        # quarterly or annual income statement
+                "balance":   tk.balance_sheet,     # quarterly or annual balance sheet
+                "cashflow":  tk.cashflow           # quarterly or annual cash-flow
+            }
+
+            for stmt_name, df in stmt_map.items():
+                try:
+                    # transpose so periods become rows
+                    df_flat = (
+                        df.T
+                        .reset_index()
+                        .rename(columns={"index": "Period"})
+                        .assign(Ticker=ticker, Statement=stmt_name)
+                    )
+                    if stmt_name == "income":
+                        income.append(df_flat)
+                    elif stmt_name == "balance":
+                        balance.append(df_flat)
+                    else:
+                        cashflow.append(df_flat)
+                    print(f"Debug: {stmt_name} for {ticker} fetched successfully")
+                except Exception as e:
+                    print(f"⚠️  {stmt_name} for {ticker} failed: {e}")
+        return (
+            pd.concat(income,   ignore_index=True, sort=False),
+            pd.concat(balance,  ignore_index=True, sort=False),
+            pd.concat(cashflow, ignore_index=True, sort=False)
+        )
     
-    def save_to_csv(data, filename):
-        """
-        Saves the DataFrame to a CSV file.
-        """
-        data.to_csv(filename, index=False)
-        print(f"Data saved to {filename}")
