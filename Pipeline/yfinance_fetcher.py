@@ -57,6 +57,12 @@ class YFinanceFetcher:
                     print(f"Debug: {stmt_name} for {ticker} fetched successfully")
                 except Exception as e:
                     print(f"⚠️  {stmt_name} for {ticker} failed: {e}")
+        
+        # iterate over the dataframes
+        for df in [income, balance, cashflow]:
+            #check if there are any columns with all values as NaN
+            df = [d for d in df if not d.empty and not d.isnull().all().all()]
+
         return (
             pd.concat(income,   ignore_index=True, sort=False),
             pd.concat(balance,  ignore_index=True, sort=False),

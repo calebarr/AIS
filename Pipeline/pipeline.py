@@ -1,6 +1,7 @@
 from AIS.Pipeline.db_connector import Database
 from AIS.Pipeline.yfinance_fetcher import YFinanceFetcher
-
+from AIS.Pipeline.AIS_processor import AISPortVisitProcessor
+import os
 
 class Pipeline:
     def __init__(self, db_config):
@@ -24,20 +25,21 @@ class Pipeline:
         except Exception as e:
             print(f"Error saving data to PostgreSQL: {e}")
 
+    def fetch_and_save_ais_data(self, start_date, end_date, save_folder):
+        processor = AISPortVisitProcessor(buffer_degrees=1)
+        processor.download_data(start_date, end_date, save_folder)
+        visits_df = processor.concat_all_zips(save_folder)
+        self.db.save_to_postgres(visits_df, "port_visits")
+        # Delete downloaded ZIP files after processing
+        processor.delete_zips(save_folder)
+
         
-
-
-
-
-        
-    
     def load_data(self, table_name):
         print(f"Loading data from PostgreSQL table: {table_name}")
         data = self.db.fetch_from_postgres(table_name)
         print(f"Data loaded successfully from {table_name}")
         return data
 
-    
 
 if __name__ == "__main__":
     
@@ -52,6 +54,9 @@ if __name__ == "__main__":
     start_date = "2020-01-01"
     end_date = "2023-10-01"
     pipeline.fetch_and_save_yfinance_data(start_date, end_date)
-    
+    save_folder = "../assets/ais_data"
+    pipeline.fetch_and_save_ais_data(start_date, end_date, save_folder)
     data = pipeline.load_data("sp500_prices")
+    print(data.head())
+    data = pipeline.load_data("port_visits")
     print(data.head())
