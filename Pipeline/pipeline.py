@@ -177,10 +177,10 @@ if __name__ == "__main__":
     }
     pipeline = Pipeline(db_config)
     start_end_tuples = [
-        ("2020-01-01", "2020-01-02"),
-        ("2021-01-04", "2021-01-05"),
+        ("2020-01-01", "2020-07-01"),
+        ("2021-01-01", "2021-07-01"),
         ("2024-01-01", "2024-07-01"),
-        ("2025-01-01", "2025-06-01")
+        ("2025-01-01", "2025-07-01")
     ]
     save_folder = "../assets/ais_data"
     output_csv = "../assets/ais_data/port_visits_first_arrivals.csv"

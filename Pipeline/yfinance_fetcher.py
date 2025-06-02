@@ -45,7 +45,7 @@ class YFinanceFetcher:
         print(df.columns)
         df = df[["Date"] + close_cols]
         return df
-
+    
     def get_sp500_statements(self,symbols):
         income, balance, cashflow = [], [], []
 
