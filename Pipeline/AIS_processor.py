@@ -1,8 +1,8 @@
 import os
-from datetime import datetime, timedelta
-import requests
 import zipfile
+import requests
 import pandas as pd
+from datetime import datetime, timedelta
 
 class AISPortVisitProcessor:
     """
@@ -63,12 +63,13 @@ class AISPortVisitProcessor:
     def assign_port_names(self, df: pd.DataFrame) -> pd.DataFrame:
         """Annotate each AIS record with its port based on LAT/LON."""
         df = df.copy()
-        df['Port Name'] = df.apply(
+        # Rename to Port_Name so it matches the Postgres column
+        df['Port_Name'] = df.apply(
             lambda row: self.get_port_name(row['LAT'], row['LON']), axis=1
         )
         return df
 
-    def extract_first_arrivals_anywhere(self,df):
+    def extract_first_arrivals_anywhere(self, df: pd.DataFrame) -> pd.DataFrame:
         # Filter by relevant vessel types
         df = df[
             df["VesselType"].isin(range(70, 90)) | df["VesselType"].isin([30, 52])
@@ -80,34 +81,30 @@ class AISPortVisitProcessor:
 
         # Convert timestamps
         df["BaseDateTime"] = pd.to_datetime(df["BaseDateTime"], errors='coerce')
-
         df = df.dropna(subset=["BaseDateTime"])
 
         # Filter for ships that are of Status 1 & 5 (Anchored)
         if "Status" in df.columns:
             df = df[df["Status"].isin([1, 5])]
 
-        """
-        Working on cleaning this section
-        """
-        # Drop all the columns that are not need
-        columns_to_drop = ["SOG", "COG", "Heading", "IMO", "VesselName", "Length", "Width", "TransceiverClass", "Cargo", "CallSign", "Draft"]
+        # Drop all the columns that are not needed, including the misspelled “TranscieverClass”
+        columns_to_drop = [
+            "SOG", "COG", "Heading", "IMO", "VesselName", "Length", "Width",
+            "TranscieverClass",  # <- drop the actual column name in the CSV
+            "Cargo", "CallSign", "Draft"
+        ]
         existing_cols = [col for col in columns_to_drop if col in df.columns]
-
         df = df.drop(columns=existing_cols)
-
-        # End of cleaning
 
         # Sort and get the first ping per MMSI
         first_arrivals = (
             df.sort_values(["MMSI", "BaseDateTime"])
-            .drop_duplicates("MMSI", keep="first")
+              .drop_duplicates("MMSI", keep="first")
         )
-        
-        return self.assign_port_names(first_arrivals)
-    
-    def process_zip_in_chunks(self,zip_path, chunksize=100_000):
 
+        return self.assign_port_names(first_arrivals)
+
+    def process_zip_in_chunks(self, zip_path, chunksize=100_000) -> pd.DataFrame:
         all_cleaned_chunks = []
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             csv_files = [name for name in zip_ref.namelist() if name.endswith('.csv')]
@@ -120,8 +117,10 @@ class AISPortVisitProcessor:
                     cleaned = self.extract_first_arrivals_anywhere(chunk)
                     all_cleaned_chunks.append(cleaned)
 
-        return pd.concat(all_cleaned_chunks, ignore_index=True)
-    
+        if all_cleaned_chunks:
+            return pd.concat(all_cleaned_chunks, ignore_index=True)
+        return pd.DataFrame()
+
     def concat_all_zips(self, folder_path: str) -> pd.DataFrame:
         """Process all ZIPs in a folder and combine unique visits."""
         zip_files = sorted([
@@ -129,9 +128,10 @@ class AISPortVisitProcessor:
             for f in os.listdir(folder_path)
             if f.endswith('.zip')
         ])
-        visits = [self.process_zip_in_chunks(zp) for zp in zip_files]
-        if visits:
-            df = pd.concat(visits, ignore_index=True)
+        visits_list = [self.process_zip_in_chunks(zp) for zp in zip_files]
+        visits_list = [df for df in visits_list if not df.empty]
+        if visits_list:
+            df = pd.concat(visits_list, ignore_index=True)
             return df.drop_duplicates('MMSI', keep='first')
         return pd.DataFrame()
 
@@ -142,13 +142,14 @@ class AISPortVisitProcessor:
         # Convert string dates to datetime objects
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
         end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
+        year = start_date.year
+        if start_date.year != end_date.year:
+            raise ValueError("Start and end dates must be in the same year.")
 
-
-        # Download each file in the date range
         for i in range((end_date - start_date).days + 1):
             date_obj = start_date + timedelta(days=i)
             filename = f"AIS_{date_obj.strftime('%Y_%m_%d')}.zip"
-            url = f"https://coast.noaa.gov/htdata/CMSP/AISDataHandler/2020/{filename}"
+            url = f"https://coast.noaa.gov/htdata/CMSP/AISDataHandler/{year}/{filename}"
             file_path = os.path.join(save_folder, filename)
 
             if not os.path.exists(file_path):
@@ -163,25 +164,25 @@ class AISPortVisitProcessor:
             else:
                 print(f"Already downloaded: {filename}")
 
-    def clean_and_save_first_arrivals(self, vessel_data, output_csv_path):
-        # Drop rows where 'Port Name' is 'Unknown'
-        cleaned_df = vessel_data[vessel_data['Port Name'] != 'Unknown'].copy()
+    def clean_and_save_first_arrivals(self, vessel_data: pd.DataFrame, output_csv_path: str) -> pd.DataFrame:
+        # Drop rows where Port_Name is 'Unknown'
+        cleaned_df = vessel_data[vessel_data['Port_Name'] != 'Unknown'].copy()
 
         # Create the output directory if it doesn't exist
         os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
 
         # Save the cleaned DataFrame to a CSV file
         cleaned_df.to_csv(output_csv_path, index=False)
-
         print(f"Cleaned data saved to: {output_csv_path}")
         print("Shape of the cleaned data:", cleaned_df.shape)
-
         return cleaned_df
 
     def delete_zips(self, folder_path: str) -> None:
         """Delete all ZIP files in the specified folder."""
-        zip_files = [os.path.join(folder_path, f)
-                     for f in os.listdir(folder_path) if f.endswith('.zip')]
+        zip_files = [
+            os.path.join(folder_path, f)
+            for f in os.listdir(folder_path) if f.endswith('.zip')
+        ]
         for zp in zip_files:
             try:
                 os.remove(zp)
@@ -191,34 +192,16 @@ class AISPortVisitProcessor:
 
     def run(self, start_date: str, end_date: str, save_folder: str, output_csv_path: str) -> pd.DataFrame:
         """Main method to download, process, and save AIS port visit data."""
-
-        # Downloading all the data at once isn't feasible due to size. Let's break down to weekly iterations.
-        
-        #1 Calculate the number of weeks between start and end dates
-        start = datetime.strptime(start_date, "%Y-%m-%d")
-        end = datetime.strptime(end_date, "%Y-%m-%d")
-        if start.year != end.year:
-            raise ValueError("Start and end dates must be in the same year.")
-        num_days = (end - start).days + 1
-        num_weeks = (num_days // 7) + (1 if num_days % 7 > 0 else 0)
-        print(f"Number of weeks to process: {num_weeks}")
-        
-        #2 Iterate over weeks and download data
         agg_cleaned_visits = pd.DataFrame()
-        for week in range(num_weeks):
-            week_start = start + timedelta(weeks=week)
-            week_end = min(end, week_start + timedelta(days=6))
-            print(f"Processing week {week + 1}/{num_weeks}: {week_start.strftime('%Y-%m-%d')} to {week_end.strftime('%Y-%m-%d')}")
-            self.download_ais_data(week_start.strftime("%Y-%m-%d"), week_end.strftime("%Y-%m-%d"), save_folder)
-            visits = self.concat_all_zips(save_folder)
-            visits = self.clean_and_save_first_arrivals(visits, output_csv_path)
-            agg_cleaned_visits = pd.concat([agg_cleaned_visits, visits], ignore_index=True)
-            # Delete the downloaded zips after processing each week
-            self.delete_zips(save_folder)
-        
-        #3 Return the aggregated cleaned visits
+        self.download_ais_data(start_date, end_date, save_folder)
+        visits = self.concat_all_zips(save_folder)
+        visits = self.clean_and_save_first_arrivals(visits, output_csv_path)
+        agg_cleaned_visits = pd.concat([agg_cleaned_visits, visits], ignore_index=True)
+        self.delete_zips(save_folder)
+
         if agg_cleaned_visits.empty:
             print("No visits found in the specified date range.")
             return pd.DataFrame()
+
         print(f"Total unique visits found: {len(agg_cleaned_visits)}")
         return agg_cleaned_visits
