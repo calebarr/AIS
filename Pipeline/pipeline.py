@@ -1,6 +1,7 @@
 from db_connector import Database
 from yfinance_fetcher import YFinanceFetcher
 from AIS_processor import AISPortVisitProcessor
+from yfinance_cleaner import YFinanceCleaner
 import os
 import pandas as pd
 from datetime import datetime, timedelta
@@ -166,6 +167,50 @@ class Pipeline:
         except Exception as e:
             print(f"Error saving YFinance data locally: {e}")
 
+    def __concat_yfinance_data(self, statements, prices, info):
+        """
+        Concatenate YFinance data into a single DataFrame.
+        statements: list of DataFrames containing financial statements
+        prices: list of DataFrames containing prices
+        info: DataFrame containing S&P 500 info
+        Returns a single DataFrame with all data combined.
+        """
+        # initialize yfinance_cleaner
+        income = statements[0]
+        balance = statements[1]
+        cashflow = statements[2]
+        cleaner = YFinanceCleaner(info,income,balance,cashflow,prices[0],prices[1])
+        df = cleaner.run()
+        return df
+
+    def load_and_concat_yfinance_data(self):
+        # Load data from PostgreSQL
+        try:
+            income = self.load_data("sp500_income_statements")
+            balance = self.load_data("sp500_balance_sheets")
+            cashflow = self.load_data("sp500_cashflow_statements")
+            prices = self.load_data("sp500_prices")
+            info = self.load_data("sp500_info")
+            macro_prices = self.load_data("macro_prices")
+            print("Data loaded successfully from PostgreSQL")
+        except Exception as e:
+            print(f"Error loading data from PostgreSQL: {e}")
+            import traceback
+            traceback.print_exc()
+
+        # Concatenate YFinance data
+        try:
+            statements = [income, balance, cashflow]
+            print(macro_prices.head())
+            prices_list = [prices, macro_prices]
+            df = pipeline.__concat_yfinance_data(statements, prices_list, info)
+            print("YFinance data concatenated successfully")
+            return df
+        except Exception as e:
+            print(f"Error concatenating YFinance data: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
 if __name__ == "__main__":
     db_config = {
@@ -176,33 +221,31 @@ if __name__ == "__main__":
         "database": "ais_sp500_db"
     }
     pipeline = Pipeline(db_config)
-    start_end_tuples = [
-        ("2020-01-01", "2020-07-01"),
-        ("2021-01-01", "2021-07-01"),
-        ("2024-01-01", "2024-07-01"),
-        ("2025-01-01", "2025-07-01")
-    ]
-    save_folder = "../assets/ais_data"
-    output_csv = "../assets/ais_data/port_visits_first_arrivals.csv"
-    for i in range(len(start_end_tuples)):
-        start_date, end_date = start_end_tuples[i]
-        replace = True if i == 0 else False
-        try:
-            pipeline.fetch_and_save_yfinance_data(start_date, end_date, replace)
-            pipeline.fetch_and_save_ais_data(start_date, end_date, save_folder, output_csv, replace)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
+    
+    # start_end_tuples = [
+    #     ("2020-01-01", "2020-07-01"),
+    #     ("2021-01-01", "2021-07-01"),
+    #     ("2024-01-01", "2024-07-01"),
+    #     ("2025-01-01", "2025-07-01")
+    # ]
+    # save_folder = "../assets/ais_data"
+    # output_csv = "../assets/ais_data/port_visits_first_arrivals.csv"
+    # for i in range(len(start_end_tuples)):
+    #     start_date, end_date = start_end_tuples[i]
+    #     replace = True if i == 0 else False
+    #     try:
+    #         pipeline.fetch_and_save_yfinance_data(start_date, end_date, replace)
+    #         pipeline.fetch_and_save_ais_data(start_date, end_date, save_folder, output_csv, replace)
+    #     except Exception as e:
+    #         import traceback
+    #         traceback.print_exc()
 
-    # Load data from PostgreSQL
-    try:
-        sp500_info = pipeline.load_data("sp500_info")
-        sp500_prices = pipeline.load_data("sp500_prices")
-        ais_visits = pipeline.load_data("ais_port_visits")
-        print("Data loaded successfully from PostgreSQL.")
-    except Exception as e:
-        print(f"Error loading data from PostgreSQL: {e}")
+    # # Load and concatenate YFinance data
+    # concatenated_df = pipeline.load_and_concat_yfinance_data()
 
-    print(sp500_info.head())
-    print(sp500_prices.tail())
-    sp500_prices.to_csv("sp500_prices.csv", index=False)
+    # Load AIS data
+    ais_data = pipeline.load_data("ais_port_visits")
+    ais_data.to_csv("ais_port_visits.csv", index=False)
+
+    
+    
