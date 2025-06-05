@@ -241,7 +241,7 @@ if __name__ == "__main__":
     #         traceback.print_exc()
 
     # # Load and concatenate YFinance data
-    # concatenated_df = pipeline.load_and_concat_yfinance_data()
+    concatenated_df = pipeline.load_and_concat_yfinance_data()
 
     # Load AIS data
     ais_data = pipeline.load_data("ais_port_visits")

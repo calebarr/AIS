@@ -183,7 +183,7 @@ class YFinanceCleaner:
         .rename(columns={0: "Price",        # rename the stacked‐value column
                         "level_1": "Ticker"}) 
         )
-        print(prices_long.head())
+        
         # 0) identical dtype against; coerce & sort
         for df in (prices_long, combined_quarterly):
             df["Period"] = pd.to_datetime(df["Period"], errors="coerce")
@@ -211,6 +211,23 @@ class YFinanceCleaner:
             .rename(columns={"Date": "Period"})
             .assign(Period=lambda d: pd.to_datetime(d["Period"]))
     )
+        
+        self.sp500_info["Symbol"]   = self.sp500_info["Symbol"].astype(str).str.upper()
+        df_daily_fund["Ticker"] = df_daily_fund["Ticker"].astype(str).str.upper()
+
+        # 3)  Merge
+        df_daily_fund = (
+            df_daily_fund
+            .merge(
+                self.sp500_info,
+                left_on="Ticker",          # daily-fundamental side
+                right_on="Symbol",         # info side
+                how="left",                # keep every trading day even if a ticker is missing from info
+            )
+            .drop(columns=["Symbol"])      # “Ticker” already covers it
+        )
+
+        # 4)  (Optional) re-order columns so company info sits together
     # If macro series isn’t daily-complete, merge_asof will back-fill the
     # most-recent macro value prior to each trading day.
         df_daily_fund = pd.merge_asof(
@@ -219,5 +236,5 @@ class YFinanceCleaner:
             on="Period",
             direction="backward"
         ).drop(columns=self.dropped_macro_price_cols, errors="ignore")
-
+        
         return df_daily_fund
