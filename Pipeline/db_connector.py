@@ -6,18 +6,18 @@ class Database:
         self.port = port
         self.database = database
 
-    def save_to_postgres(self, data,table_name):
+    def save_to_postgres(self, data,table_name, replace=False):
         from sqlalchemy import create_engine
 
         engine = create_engine(
             f'postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}'
         )
         data.to_sql(
-            name=table_name,
-            con=engine,
-            if_exists='replace',
-            index=False
-        )
+                name=table_name,
+                con=engine,
+                if_exists='append' if not replace else 'replace',
+                index=False
+            )
         engine.dispose()
 
     def fetch_from_postgres(self, table_name):
