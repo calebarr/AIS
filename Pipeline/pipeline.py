@@ -243,6 +243,12 @@ if __name__ == "__main__":
     # # Load and concatenate YFinance data
     concatenated_df = pipeline.load_and_concat_yfinance_data()
 
+    if concatenated_df is not None:
+        pipeline.db.save_to_postgres(concatenated_df, "ais_port_financial_data_db", replace=True)
+        print("concatenated_df saved to PostgreSQL as 'ais_port_financial_data_db'")
+    else:
+        print("concatenated_df is empty.")
+
     # Load AIS data
     ais_data = pipeline.load_data("ais_port_visits")
     ais_data.to_csv("ais_port_visits.csv", index=False)
