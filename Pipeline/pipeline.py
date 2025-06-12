@@ -1,7 +1,7 @@
-from db_connector import Database
-from yfinance_fetcher import YFinanceFetcher
-from AIS_processor import AISPortVisitProcessor
-from yfinance_cleaner import YFinanceCleaner
+from Pipeline.db_connector import Database
+from Pipeline.yfinance_fetcher import YFinanceFetcher
+from Pipeline.AIS_processor import AISPortVisitProcessor
+from Pipeline.yfinance_cleaner import YFinanceCleaner
 import os
 import pandas as pd
 from datetime import datetime, timedelta
@@ -222,23 +222,23 @@ if __name__ == "__main__":
     }
     pipeline = Pipeline(db_config)
     
-    # start_end_tuples = [
-    #     ("2020-01-01", "2020-07-01"),
-    #     ("2021-01-01", "2021-07-01"),
-    #     ("2024-01-01", "2024-07-01"),
-    #     ("2025-01-01", "2025-07-01")
-    # ]
-    # save_folder = "../assets/ais_data"
-    # output_csv = "../assets/ais_data/port_visits_first_arrivals.csv"
-    # for i in range(len(start_end_tuples)):
-    #     start_date, end_date = start_end_tuples[i]
-    #     replace = True if i == 0 else False
-    #     try:
-    #         pipeline.fetch_and_save_yfinance_data(start_date, end_date, replace)
-    #         pipeline.fetch_and_save_ais_data(start_date, end_date, save_folder, output_csv, replace)
-    #     except Exception as e:
-    #         import traceback
-    #         traceback.print_exc()
+    start_end_tuples = [
+        ("2020-01-01", "2020-07-01"),
+        ("2021-01-01", "2021-07-01"),
+        ("2024-01-01", "2024-07-01"),
+        ("2025-01-01", "2025-07-01")
+    ]
+    save_folder = "../assets/ais_data"
+    output_csv = "../assets/ais_data/port_visits_first_arrivals.csv"
+    for i in range(len(start_end_tuples)):
+        start_date, end_date = start_end_tuples[i]
+        replace = True if i == 0 else False
+        try:
+            pipeline.fetch_and_save_yfinance_data(start_date, end_date, replace)
+            pipeline.fetch_and_save_ais_data(start_date, end_date, save_folder, output_csv, replace)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
 
     # # Load and concatenate YFinance data
     concatenated_df = pipeline.load_and_concat_yfinance_data()
